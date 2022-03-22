@@ -107,7 +107,6 @@ if __name__ == '__main__':
                 delta += math.fabs((testcase_zscores[feature] -
                                     feature_zscores[deception][feature]))
             delta /= len(features)
-            #print("Delta score for candidate", deception, "is", delta)
             if delta < score:
                 label = deception
                 score = delta
@@ -145,10 +144,12 @@ if __name__ == '__main__':
                 delta += math.fabs((testcase_zscores[feature] -
                                     feature_zscores[deception][feature]))
             delta /= len(features)
-            # print("Delta score for candidate", deception, "is", delta)
+
             if delta < score:
                 label = deception
                 score = delta
+
+        print("Review:", test, "is", label, score)
         if label == "truthful":
             counter += 1
 
