@@ -7,70 +7,151 @@ from helpers.text_helper import preprocess_text
 
 
 if __name__ == '__main__':
-    negative_deceptive = get_ott_negative_deceptive()['text'].apply(lambda x: preprocess_text(x))[:300]
-    negative_truthful = get_ott_negative_truthful()['text'].apply(lambda x: preprocess_text(x))[:300]
+    reviews_by_deception = {}
 
-    negative_deceptive_test = get_ott_negative_deceptive()['text'].apply(lambda x: preprocess_text(x))[300:]
-    negative_truthful_test = get_ott_negative_truthful()['text'].apply(lambda x: preprocess_text(x))[300:]
+    reviews_by_deception['deceptive'] = ' '.join(
+        get_ott_negative_deceptive()['text'].apply(lambda x: preprocess_text(x))[:300])
+    reviews_by_deception['truthful'] = ' '.join(
+        get_ott_negative_truthful()['text'].apply(lambda x: preprocess_text(x))[:300])
+    deceptions = ['deceptive', 'truthful']
+    reviews_by_deception_tokens = {}
+    for deception in deceptions:
+        tokens = nltk.word_tokenize(reviews_by_deception[deception])
 
-    negative_deceptive_tokens = nltk.word_tokenize(' '.join(negative_deceptive))
-    negative_truthful_tokens = nltk.word_tokenize(' '.join(negative_truthful))
+        # Filter out punctuation
+        reviews_by_deception_tokens[deception] = ([token for token in tokens if any(c.isalpha() for c in token)])
 
-    negative_deceptive_test_tokens = nltk.word_tokenize(' '.join(negative_deceptive_test))
-    negative_truthful_test_tokens = nltk.word_tokenize(' '.join(negative_truthful_test))
+    for deception in deceptions:
+        reviews_by_deception_tokens[deception] = (
+            [token for token in reviews_by_deception_tokens[deception]])
 
-    combined_negative_tokens = negative_deceptive_tokens + negative_truthful_tokens
+    whole_corpus = []
+    for deception in deceptions:
+        whole_corpus += reviews_by_deception_tokens[deception]
+    whole_corpus_freq_dist = list(nltk.FreqDist(whole_corpus).most_common(30))
 
-    combined_frequencies = list(nltk.FreqDist(combined_negative_tokens).most_common(30))
+    features = [word for word, freq in whole_corpus_freq_dist]
+    feature_freqs = {}
 
-    features = pd.DataFrame()
-    features['feature'] = [feature for feature, frequency in combined_frequencies]
-    features['deceptive_frequency'] = features['feature'].apply(
-        lambda x: negative_deceptive_tokens.count(x)/len(negative_deceptive_tokens))
-    features['truthful_frequency'] = features['feature'].apply(
-        lambda x: negative_truthful_tokens.count(x)/len(negative_truthful_tokens))
-    features['mean'] = (features['deceptive_frequency'] + features['truthful_frequency'])/2
-    features['std'] = (features['deceptive_frequency'] - features['mean'])**2 + \
-                      (features['truthful_frequency'] - features['mean'])**2
-    features['std'] = features['std'].apply(lambda x: math.sqrt(x))
+    for deception in deceptions:
+        # A dictionary for each candidate's features
+        feature_freqs[deception] = {}
 
-    features['deceptive_z_score'] = features['deceptive_frequency'] - features['mean']
-    features['deceptive_z_score'] = features['deceptive_z_score'] / features['std']
-    features['truthful_z_score'] = features['truthful_frequency'] - features['mean']
-    features['truthful_z_score'] = features['truthful_z_score'] / features['std']
+        # A helper value containing the number of tokens in the author's subcorpus
+        overall = len(reviews_by_deception_tokens[deception])
 
-    features['deceptive_test_frequency'] = features['feature'].apply(
-        lambda x: negative_deceptive_test_tokens.count(x) / len(negative_deceptive_test_tokens))
-    features['deceptive_test_z_score'] = features['deceptive_test_frequency'] - features['mean']
-    features['deceptive_test_z_score'] = features['deceptive_test_z_score'] / features['std']
+        # Calculate each feature's presence in the subcorpus
+        for feature in features:
+            presence = reviews_by_deception_tokens[deception].count(feature)
+            feature_freqs[deception][feature] = presence / overall
 
-    features['truthful_test_frequency'] = features['feature'].apply(
-        lambda x: negative_truthful_test_tokens.count(x) / len(negative_truthful_test_tokens))
-    features['truthful_test_z_score'] = features['truthful_test_frequency'] - features['mean']
-    features['truthful_test_z_score'] = features['truthful_test_z_score'] / features['std']
+    corpus_features = {}
 
-    features.to_csv('local_datasets/features_negative.csv', index=False)
+    # For each feature...
+    for feature in features:
+        # Create a sub-dictionary that will contain the feature's mean
+        # and standard deviation
+        corpus_features[feature] = {}
 
-    print("Testing Deceptive Reviews...")
-    delta = 0
-    for _, row in features.iterrows():
-        delta += math.fabs(row['deceptive_test_z_score'] - row['deceptive_z_score'])
-    print("Delta score for deceptive is", delta/len(features['feature']))
+        # Calculate the mean of the frequencies expressed in the subcorpora
+        feature_average = 0
+        for deception in deceptions:
+            feature_average += feature_freqs[deception][feature]
+        feature_average /= len(deceptions)
+        corpus_features[feature]["Mean"] = feature_average
 
-    delta = 0
-    for _, row in features.iterrows():
-        delta += math.fabs(row['deceptive_test_z_score'] - row['truthful_z_score'])
-    print("Delta score for truthful is", delta / len(features['feature']))
+        # Calculate the standard deviation using the basic formula for a sample
+        feature_stdev = 0
+        for deception in deceptions:
+            diff = feature_freqs[deception][feature] - corpus_features[feature]["Mean"]
+            feature_stdev += diff * diff
+        feature_stdev /= (len(deceptions) - 1)
+        feature_stdev = math.sqrt(feature_stdev)
+        corpus_features[feature]["StdDev"] = feature_stdev
 
-    print('#################')
+    feature_zscores = {}
+    for deception in deceptions:
+        feature_zscores[deception] = {}
+        for feature in features:
+            feature_val = feature_freqs[deception][feature]
+            feature_mean = corpus_features[feature]["Mean"]
+            feature_stdev = corpus_features[feature]["StdDev"]
+            feature_zscores[deception][feature] = ((feature_val - feature_mean) / feature_stdev)
 
-    print("Testing Truthful Reviews...")
-    delta = 0
-    for _, row in features.iterrows():
-        delta += math.fabs(row['truthful_test_z_score'] - row['deceptive_z_score'])
-    print("Delta score for deceptive is", delta/len(features['feature']))
+    deceptive_test = get_ott_negative_deceptive()['text'].apply(lambda x: preprocess_text(x))[300:]
 
-    delta = 0
-    for _, row in features.iterrows():
-        delta += math.fabs(row['truthful_test_z_score'] - row['truthful_z_score'])
-    print("Delta score for truthful is", delta / len(features['feature']))
+    counter = 0
+    for test in deceptive_test:
+        testcase_tokens = nltk.word_tokenize(test)
+        testcase_tokens = [token.lower() for token in testcase_tokens
+                           if any(c.isalpha() for c in token)]
+
+        overall = len(testcase_tokens)
+        testcase_freqs = {}
+        for feature in features:
+            presence = testcase_tokens.count(feature)
+            testcase_freqs[feature] = presence / overall
+
+        # Calculate the test case's feature z-scores
+        testcase_zscores = {}
+        for feature in features:
+            feature_val = testcase_freqs[feature]
+            feature_mean = corpus_features[feature]["Mean"]
+            feature_stdev = corpus_features[feature]["StdDev"]
+            testcase_zscores[feature] = (feature_val - feature_mean) / feature_stdev
+        label = ''
+        score = 10000
+        for deception in deceptions:
+            delta = 0
+            for feature in features:
+                delta += math.fabs((testcase_zscores[feature] -
+                                    feature_zscores[deception][feature]))
+            delta /= len(features)
+            if delta < score:
+                label = deception
+                score = delta
+        if label == "deceptive":
+            counter += 1
+
+    print("Deceptive test: {} %".format(counter))
+
+    truthful_test = get_ott_negative_truthful()['text'].apply(lambda x: preprocess_text(x))[300:]
+
+    counter = 0
+    for test in truthful_test:
+        testcase_tokens = nltk.word_tokenize(test)
+        testcase_tokens = [token.lower() for token in testcase_tokens
+                           if any(c.isalpha() for c in token)]
+
+        overall = len(testcase_tokens)
+        testcase_freqs = {}
+        for feature in features:
+            presence = testcase_tokens.count(feature)
+            testcase_freqs[feature] = presence / overall
+
+        # Calculate the test case's feature z-scores
+        testcase_zscores = {}
+        for feature in features:
+            feature_val = testcase_freqs[feature]
+            feature_mean = corpus_features[feature]["Mean"]
+            feature_stdev = corpus_features[feature]["StdDev"]
+            testcase_zscores[feature] = (feature_val - feature_mean) / feature_stdev
+        label = ''
+        score = 10000
+        for deception in deceptions:
+            delta = 0
+            for feature in features:
+                delta += math.fabs((testcase_zscores[feature] -
+                                    feature_zscores[deception][feature]))
+            delta /= len(features)
+
+            if delta < score:
+                label = deception
+                score = delta
+
+        if label == "truthful":
+            counter += 1
+
+    print("Truthful test: {} %".format(counter))
+
+

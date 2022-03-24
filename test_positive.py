@@ -149,7 +149,6 @@ if __name__ == '__main__':
                 label = deception
                 score = delta
 
-        print("Review:", test, "is", label, score)
         if label == "truthful":
             counter += 1
 
