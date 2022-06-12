@@ -1,6 +1,5 @@
 import nltk
 import math
-import pandas as pd
 
 from helpers.ott_helper import get_ott_negative_deceptive, get_ott_negative_truthful
 from helpers.text_helper import preprocess_text
@@ -19,7 +18,8 @@ if __name__ == '__main__':
         tokens = nltk.word_tokenize(reviews_by_deception[deception])
 
         # Filter out punctuation
-        reviews_by_deception_tokens[deception] = ([token for token in tokens if any(c.isalpha() for c in token)])
+        #reviews_by_deception_tokens[deception] = ([token for token in tokens if any(c.isalpha() for c in token)])
+        reviews_by_deception_tokens[deception] = ([token for token in tokens])
 
     for deception in deceptions:
         reviews_by_deception_tokens[deception] = (
@@ -28,7 +28,7 @@ if __name__ == '__main__':
     whole_corpus = []
     for deception in deceptions:
         whole_corpus += reviews_by_deception_tokens[deception]
-    whole_corpus_freq_dist = list(nltk.FreqDist(whole_corpus).most_common(30))
+    whole_corpus_freq_dist = list(nltk.FreqDist(whole_corpus).most_common(100))
 
     features = [word for word, freq in whole_corpus_freq_dist]
     feature_freqs = {}
@@ -79,6 +79,8 @@ if __name__ == '__main__':
             feature_zscores[deception][feature] = ((feature_val - feature_mean) / feature_stdev)
 
     deceptive_test = get_ott_negative_deceptive()['text'].apply(lambda x: preprocess_text(x))[300:]
+
+    print(feature_zscores)
 
     counter = 0
     for test in deceptive_test:

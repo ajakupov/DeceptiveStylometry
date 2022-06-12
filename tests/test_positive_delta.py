@@ -19,7 +19,8 @@ if __name__ == '__main__':
         tokens = nltk.word_tokenize(reviews_by_deception[deception])
 
         # Filter out punctuation
-        reviews_by_deception_tokens[deception] = ([token for token in tokens if any(c.isalpha() for c in token)])
+        #reviews_by_deception_tokens[deception] = ([token for token in tokens if any(c.isalpha() for c in token)])
+        reviews_by_deception_tokens[deception] = ([token for token in tokens])
 
     for deception in deceptions:
         reviews_by_deception_tokens[deception] = (
@@ -28,7 +29,7 @@ if __name__ == '__main__':
     whole_corpus = []
     for deception in deceptions:
         whole_corpus += reviews_by_deception_tokens[deception]
-    whole_corpus_freq_dist = list(nltk.FreqDist(whole_corpus).most_common(30))
+    whole_corpus_freq_dist = list(nltk.FreqDist(whole_corpus).most_common(1000))
 
     features = [word for word, freq in whole_corpus_freq_dist]
     feature_freqs = {}
@@ -80,6 +81,8 @@ if __name__ == '__main__':
 
     deceptive_test = get_ott_positive_deceptive()['text'].apply(lambda x: preprocess_text(x))[300:]
 
+    print(feature_zscores)
+
     counter = 0
     for test in deceptive_test:
         testcase_tokens = nltk.word_tokenize(test)
@@ -116,7 +119,6 @@ if __name__ == '__main__':
     print("Deceptive test: {} %".format(counter))
 
     truthful_test = get_ott_positive_truthful()['text'].apply(lambda x: preprocess_text(x))[300:]
-
     counter = 0
     for test in truthful_test:
         testcase_tokens = nltk.word_tokenize(test)
